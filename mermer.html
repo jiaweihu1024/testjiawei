@@ -1,0 +1,1268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Love Connect Calendar</title>
+    <!-- Tailwind CSS v3 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js"></script>
+
+    <!-- Tailwind 配置 -->
+    <script>
+        tailwind.config = {
+          theme: {
+            extend: {
+              colors: {
+                primary: '#8ECAE6',
+                secondary: '#A2D2FF',
+                accent: '#FF9E9E',
+                light: '#F8F9FA',
+                dark: '#495057',
+                success: '#4CAF50',
+                warning: '#FFC107',
+                love: {
+                  50: '#FFF5F7',
+                  100: '#FFE6EB',
+                  200: '#FFCCD5',
+                  300: '#FFB3C1',
+                  400: '#FF99AC',
+                  500: '#FF8098',
+                  600: '#FF6683',
+                  700: '#FF4D6E',
+                  800: '#FF335A',
+                  900: '#FF1A45',
+                  950: '#D90A33',
+                }
+              },
+              fontFamily: {
+                sans: ['Inter', 'system-ui', 'sans-serif'],
+              },
+              animation: {
+                'bounce-slow': 'bounce 3s infinite',
+                'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                'float': 'float 3s ease-in-out infinite',
+                'shine': 'shine 2s infinite',
+              },
+              keyframes: {
+                float: {
+                  '0%, 100%': { transform: 'translateY(0)' },
+                  '50%': { transform: 'translateY(-10px)' },
+                },
+                shine: {
+                  '0%, 100%': { opacity: 1 },
+                  '50%': { opacity: 0.5 },
+                }
+              }
+            }
+          }
+        }
+    </script>
+
+    <style type="text/tailwindcss">
+        @layer utilities {
+          .text-shadow {
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          }
+          .text-shadow-lg {
+            text-shadow: 0 4px 8px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.08);
+          }
+          .bg-blur {
+            backdrop-filter: blur(8px);
+          }
+          .calendar-day {
+            @apply w-14 h-14 md:w-16 md:h-16 flex flex-col items-center justify-start p-1 rounded-lg transition-all duration-300 cursor-pointer;
+          }
+          .calendar-day:hover {
+            @apply bg-love-100;
+          }
+          .calendar-day.today {
+            @apply bg-love-200 border-2 border-love-500;
+          }
+          .calendar-day.has-content {
+            @apply bg-love-100 border border-love-300;
+          }
+          .calendar-day.has-anniversary {
+            @apply bg-accent border-2 border-love-700;
+          }
+          .badge-glow {
+            box-shadow: 0 0 15px rgba(255, 158, 158, 0.7);
+          }
+          .badge-hover:hover {
+            transform: translateY(-5px) scale(1.05);
+          }
+          .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+          }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-love-50 to-blue-50 min-h-screen font-sans text-dark">
+<!-- 背景装饰 -->
+<div class="fixed inset-0 -z-10 overflow-hidden">
+    <div class="absolute top-10 left-10 w-40 h-40 bg-primary/20 rounded-full blur-3xl"></div>
+    <div class="absolute bottom-10 right-10 w-60 h-60 bg-accent/20 rounded-full blur-3xl"></div>
+    <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-secondary/20 rounded-full blur-3xl"></div>
+</div>
+
+<!-- 主容器 -->
+<div class="container mx-auto px-4 py-6 max-w-6xl">
+    <!-- 顶部导航 -->
+    <header class="flex flex-col md:flex-row items-center justify-between mb-8">
+        <div class="flex items-center mb-4 md:mb-0">
+            <h1 class="text-3xl font-bold text-love-800 text-shadow">Love Connect Calendar</h1>
+        </div>
+
+        <div class="flex items-center space-x-4">
+            <div class="bg-white rounded-full px-4 py-2 shadow-md flex items-center">
+                <i class="fa fa-heart text-love-600 mr-2"></i>
+                <span class="font-semibold" id="interaction-days">我们已经在一起 <span class="text-love-700 text-lg">0</span> 天</span>
+            </div>
+
+            <button id="settings-btn" class="bg-white p-2 rounded-full shadow-md hover:shadow-lg transition-shadow">
+                <i class="fa fa-cog text-dark"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- 主要内容区域 -->
+    <main class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- 左侧边栏 -->
+        <div class="lg:col-span-1 space-y-6">
+            <!-- 互动统计卡片 -->
+            <div class="bg-white rounded-2xl shadow-lg p-6 glass-card">
+                <h2 class="text-xl font-bold mb-4 text-love-800 flex items-center">
+                    <i class="fa fa-line-chart mr-2"></i>互动统计
+                </h2>
+
+                <div class="space-y-4">
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-sm font-medium">连续互动天数</span>
+                            <span class="text-sm font-bold text-love-700" id="streak-days">0天</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2.5">
+                            <div class="bg-love-500 h-2.5 rounded-full" id="streak-progress" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-sm font-medium">本月互动次数</span>
+                            <span class="text-sm font-bold text-love-700" id="monthly-interactions">0次</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2.5">
+                            <div class="bg-primary h-2.5 rounded-full" id="monthly-progress" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <div class="mt-6">
+                        <canvas id="interaction-chart" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 成就徽章卡片 -->
+            <div class="bg-white rounded-2xl shadow-lg p-6 glass-card">
+                <h2 class="text-xl font-bold mb-4 text-love-800 flex items-center">
+                    <i class="fa fa-trophy mr-2"></i>成就徽章
+                </h2>
+
+                <div class="grid grid-cols-2 gap-4" id="badges-container">
+                    <!-- 徽章将通过JS动态添加 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 中间和右侧内容 -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- 日历视图 -->
+            <div class="bg-white rounded-2xl shadow-lg p-6 glass-card">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+                    <h2 class="text-xl font-bold text-love-800 mb-4 md:mb-0 flex items-center">
+                        <i class="fa fa-calendar mr-2"></i>
+                        <span id="current-month">2023年6月</span>
+                    </h2>
+
+                    <div class="flex space-x-2">
+                        <button id="prev-month" class="bg-love-100 hover:bg-love-200 text-love-800 p-2 rounded-lg transition-colors">
+                            <i class="fa fa-chevron-left"></i>
+                        </button>
+
+                        <div class="flex space-x-1">
+                            <button class="calendar-view-btn bg-love-500 text-white px-3 py-1 rounded-lg" data-view="month">月</button>
+                            <button class="calendar-view-btn bg-love-100 text-love-800 px-3 py-1 rounded-lg" data-view="week">周</button>
+                            <button class="calendar-view-btn bg-love-100 text-love-800 px-3 py-1 rounded-lg" data-view="day">日</button>
+                        </div>
+
+                        <button id="next-month" class="bg-love-100 hover:bg-love-200 text-love-800 p-2 rounded-lg transition-colors">
+                            <i class="fa fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 日历头部 - 星期 -->
+                <div class="grid grid-cols-7 gap-1 mb-2">
+                    <div class="text-center font-medium text-love-700 py-2">日</div>
+                    <div class="text-center font-medium text-love-700 py-2">一</div>
+                    <div class="text-center font-medium text-love-700 py-2">二</div>
+                    <div class="text-center font-medium text-love-700 py-2">三</div>
+                    <div class="text-center font-medium text-love-700 py-2">四</div>
+                    <div class="text-center font-medium text-love-700 py-2">五</div>
+                    <div class="text-center font-medium text-love-700 py-2">六</div>
+                </div>
+
+                <!-- 日历内容 -->
+                <div id="calendar-grid" class="grid grid-cols-7 gap-1">
+                    <!-- 日历格子将通过JS动态添加 -->
+                </div>
+            </div>
+
+            <!-- 今日互动卡片 -->
+            <div class="bg-white rounded-2xl shadow-lg p-6 glass-card">
+                <h2 class="text-xl font-bold mb-4 text-love-800 flex items-center">
+                    <i class="fa fa-pencil mr-2"></i>今日互动
+                    <span class="ml-auto text-sm font-normal text-gray-500" id="today-date">2023年6月15日</span>
+                </h2>
+
+                <div class="mb-4">
+                    <textarea id="interaction-text" class="w-full border border-love-200 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-love-400 focus:border-transparent resize-none" rows="3" placeholder="今天想对Ta说些什么..."></textarea>
+                </div>
+
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <button id="upload-image-btn" class="flex items-center text-love-700 hover:text-love-500 transition-colors mr-4">
+                            <i class="fa fa-image mr-1"></i>
+                            <span>上传图片</span>
+                            <input type="file" id="image-input" accept="image/*" class="hidden">
+                        </button>
+
+                        <div id="image-preview-container" class="hidden">
+                            <img id="image-preview" class="w-12 h-12 object-cover rounded-lg border-2 border-love-300">
+                            <button id="remove-image-btn" class="absolute -top-2 -right-2 bg-love-700 text-white rounded-full w-6 h-6 flex items-center justify-center">
+                                <i class="fa fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <button id="save-interaction-btn" class="bg-love-600 hover:bg-love-700 text-white px-6 py-2 rounded-lg transition-colors flex items-center">
+                        <i class="fa fa-heart mr-1"></i>
+                        <span>保存今日互动</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 最近互动记录 -->
+            <div class="bg-white rounded-2xl shadow-lg p-6 glass-card">
+                <h2 class="text-xl font-bold mb-4 text-love-800 flex items-center">
+                    <i class="fa fa-clock-o mr-2"></i>最近互动
+                </h2>
+
+                <div id="recent-interactions" class="space-y-4">
+                    <!-- 最近互动记录将通过JS动态添加 -->
+                    <div class="text-center text-gray-500 py-8">
+                        还没有互动记录，开始你们的第一个互动吧！
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- 模态框 - 设置 -->
+<div id="settings-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+    <div class="bg-white rounded-2xl p-6 max-w-md w-full mx-4">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-bold text-love-800">设置</h2>
+            <button id="close-settings-btn" class="text-gray-500 hover:text-gray-700">
+                <i class="fa fa-times"></i>
+            </button>
+        </div>
+
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">相恋开始日期</label>
+                <input type="date" id="relationship-start-date" class="w-full border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-love-400 focus:border-transparent">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">你的名字</label>
+                <input type="text" id="your-name" class="w-full border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-love-400 focus:border-transparent" placeholder="请输入你的名字">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Ta的名字</label>
+                <input type="text" id="partner-name" class="w-full border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-love-400 focus:border-transparent" placeholder="请输入Ta的名字">
+            </div>
+        </div>
+
+        <div class="mt-6">
+            <h3 class="text-lg font-semibold mb-3">纪念日</h3>
+
+            <div id="anniversaries-list" class="space-y-3 mb-4">
+                <!-- 纪念日将通过JS动态添加 -->
+            </div>
+
+            <div class="flex space-x-2">
+                <input type="text" id="new-anniversary-title" class="flex-1 border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-love-400 focus:border-transparent" placeholder="纪念日名称">
+                <input type="date" id="new-anniversary-date" class="border border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-love-400 focus:border-transparent">
+                <button id="add-anniversary-btn" class="bg-love-600 hover:bg-love-700 text-white px-4 py-2 rounded-lg transition-colors">
+                    添加
+                </button>
+            </div>
+        </div>
+
+        <div class="mt-6 flex justify-end">
+            <button id="save-settings-btn" class="bg-love-600 hover:bg-love-700 text-white px-6 py-2 rounded-lg transition-colors">
+                保存设置
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 模态框 - 日期详情 -->
+<div id="date-detail-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+    <div class="bg-white rounded-2xl p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-bold text-love-800" id="detail-modal-title">2023年6月15日</h2>
+            <button id="close-detail-btn" class="text-gray-500 hover:text-gray-700">
+                <i class="fa fa-times"></i>
+            </button>
+        </div>
+
+        <div id="date-interactions" class="space-y-4">
+            <!-- 日期互动内容将通过JS动态添加 -->
+        </div>
+    </div>
+</div>
+
+<!-- 模态框 - 徽章解锁 -->
+<div id="badge-unlock-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+    <div class="bg-white rounded-2xl p-6 max-w-md w-full mx-4 text-center">
+        <div class="mb-6">
+            <div class="w-32 h-32 mx-auto mb-4 animate-float">
+                <img id="unlocked-badge-image" src="" alt="解锁徽章" class="w-full h-full object-contain">
+            </div>
+            <h2 class="text-2xl font-bold text-love-800 mb-2">恭喜解锁新徽章！</h2>
+            <p class="text-lg text-gray-600" id="unlocked-badge-title">50天相守</p>
+            <p class="text-gray-500" id="unlocked-badge-description">连续互动50天，继续保持！</p>
+        </div>
+
+        <button id="close-badge-modal" class="bg-love-600 hover:bg-love-700 text-white px-6 py-2 rounded-lg transition-colors">
+            太棒了！
+        </button>
+    </div>
+</div>
+
+<script>
+    // Your web app's Firebase configuration
+    const firebaseConfig = {
+      apiKey: "AIzaSyCRKGyBkJmzle_HTHdEU-LQHIc_OLm1DV0",
+      authDomain: "mermer-huhu-4d7a6.firebaseapp.com",
+      databaseURL: "https://mermer-huhu-4d7a6-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "mermer-huhu-4d7a6",
+      storageBucket: "mermer-huhu-4d7a6.firebasestorage.app",
+      messagingSenderId: "151335979059",
+      appId: "1:151335979059:web:bc39f5bad6c9a7a166bb46"
+    };
+
+    // 初始化 Firebase
+    firebase.initializeApp(firebaseConfig);
+    const database = firebase.database();
+
+    // 应用状态
+    const appState = {
+      currentDate: new Date(),
+      currentView: 'month',
+      relationshipStartDate: null,
+      yourName: '',
+      partnerName: '',
+      interactions: {},
+      anniversaries: [],
+      badges: [
+        {
+          id: 'badge-50days',
+          title: '50天相守',
+          description: '连续互动50天，继续保持！',
+          icon: 'https://p6-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/rc/pc/super_tool/2938376fbaa843eba0925eb4e8f1fa17~tplv-a9rns2rl98-image.image?lk3s=8e244e95&rcl=202603171526415D698F8D21F78C13EED8&rrcfp=f06b921b&x-expires=1776324441&x-signature=hQ119X2NN3cb37W0rnWs6pTjrSQ%3D',
+          unlocked: false,
+          condition: {
+            type: 'streak_days',
+            value: 50
+          }
+        },
+        {
+          id: 'badge-100days',
+          title: '100天相守',
+          description: '连续互动100天，真的很不容易！',
+          icon: 'https://p26-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/rc/pc/super_tool/ad1ae2c5f96d4c5990ce41841c3452fe~tplv-a9rns2rl98-image.image?lk3s=8e244e95&rcl=202603171526415D698F8D21F78C13EED8&rrcfp=f06b921b&x-expires=1776324441&x-signature=EstjdWdHxhx0VkZGTQmtZ%2FtiQUE%3D',
+          unlocked: false,
+          condition: {
+            type: 'streak_days',
+            value: 100
+          }
+        },
+        {
+          id: 'badge-365days',
+          title: '365天相守',
+          description: '一年了！你们的爱情真的很坚定！',
+          icon: 'https://p11-flow-imagex-sign.byteimg.com/tos-cn-i-a9rns2rl98/rc/pc/super_tool/694d2fc33334234a2c9ef50beb26693~tplv-a9rns2rl98-image.image?lk3s=8e244e95&rcl=202603171526415D698F8D21F78C13EED8&rrcfp=f06b921b&x-expires=1776324441&x-signature=ye8AMSy68MGMXnHuVQRVTyUvPMw%3D',
+          unlocked: false,
+          condition: {
+            type: 'relationship_days',
+            value: 365
+          }
+        }
+      ],
+      selectedDate: null,
+      selectedImage: null
+    };
+
+    // DOM 元素
+    const elements = {
+      calendarGrid: document.getElementById('calendar-grid'),
+      currentMonth: document.getElementById('current-month'),
+      prevMonth: document.getElementById('prev-month'),
+      nextMonth: document.getElementById('next-month'),
+      calendarViewBtns: document.querySelectorAll('.calendar-view-btn'),
+      interactionDays: document.getElementById('interaction-days'),
+      streakDays: document.getElementById('streak-days'),
+      streakProgress: document.getElementById('streak-progress'),
+      monthlyInteractions: document.getElementById('monthly-interactions'),
+      monthlyProgress: document.getElementById('monthly-progress'),
+      interactionChart: document.getElementById('interaction-chart'),
+      badgesContainer: document.getElementById('badges-container'),
+      todayDate: document.getElementById('today-date'),
+      interactionText: document.getElementById('interaction-text'),
+      uploadImageBtn: document.getElementById('upload-image-btn'),
+      imageInput: document.getElementById('image-input'),
+      imagePreviewContainer: document.getElementById('image-preview-container'),
+      imagePreview: document.getElementById('image-preview'),
+      removeImageBtn: document.getElementById('remove-image-btn'),
+      saveInteractionBtn: document.getElementById('save-interaction-btn'),
+      recentInteractions: document.getElementById('recent-interactions'),
+      settingsBtn: document.getElementById('settings-btn'),
+      settingsModal: document.getElementById('settings-modal'),
+      closeSettingsBtn: document.getElementById('close-settings-btn'),
+      relationshipStartDate: document.getElementById('relationship-start-date'),
+      yourName: document.getElementById('your-name'),
+      partnerName: document.getElementById('partner-name'),
+      anniversariesList: document.getElementById('anniversaries-list'),
+      newAnniversaryTitle: document.getElementById('new-anniversary-title'),
+      newAnniversaryDate: document.getElementById('new-anniversary-date'),
+      addAnniversaryBtn: document.getElementById('add-anniversary-btn'),
+      saveSettingsBtn: document.getElementById('save-settings-btn'),
+      dateDetailModal: document.getElementById('date-detail-modal'),
+      closeDetailBtn: document.getElementById('close-detail-btn'),
+      detailModalTitle: document.getElementById('detail-modal-title'),
+      dateInteractions: document.getElementById('date-interactions'),
+      badgeUnlockModal: document.getElementById('badge-unlock-modal'),
+      unlockedBadgeImage: document.getElementById('unlocked-badge-image'),
+      unlockedBadgeTitle: document.getElementById('unlocked-badge-title'),
+      unlockedBadgeDescription: document.getElementById('unlocked-badge-description'),
+      closeBadgeModal: document.getElementById('close-badge-modal')
+    };
+
+    // 图表实例
+    let interactionChart = null;
+
+    // 工具函数
+    function formatDate(date) {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    }
+
+    function formatDisplayDate(date) {
+      return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+    }
+
+    function formatMonthYear(date) {
+      return `${date.getFullYear()}年${date.getMonth() + 1}月`;
+    }
+
+    function getDaysInMonth(year, month) {
+      return new Date(year, month + 1, 0).getDate();
+    }
+
+    function getFirstDayOfMonth(year, month) {
+      return new Date(year, month, 1).getDay();
+    }
+
+    function isToday(date) {
+      const today = new Date();
+      return date.getDate() === today.getDate() &&
+             date.getMonth() === today.getMonth() &&
+             date.getFullYear() === today.getFullYear();
+    }
+
+    function isAnniversary(date) {
+      const dateStr = formatDate(date);
+      return appState.anniversaries.some(anniversary => {
+        const annivDate = new Date(anniversary.date);
+        return annivDate.getDate() === date.getDate() &&
+               annivDate.getMonth() === date.getMonth();
+      });
+    }
+
+    function getAnniversary(date) {
+      const dateStr = formatDate(date);
+      return appState.anniversaries.find(anniversary => {
+        const annivDate = new Date(anniversary.date);
+        return annivDate.getDate() === date.getDate() &&
+               annivDate.getMonth() === date.getMonth();
+      });
+    }
+
+    function hasInteraction(date) {
+      const dateStr = formatDate(date);
+      return appState.interactions[dateStr] && appState.interactions[dateStr].length > 0;
+    }
+
+    function getInteractionsForDate(date) {
+      const dateStr = formatDate(date);
+      return appState.interactions[dateStr] || [];
+    }
+
+    function calculateRelationshipDays() {
+      if (!appState.relationshipStartDate) return 0;
+
+      const startDate = new Date(appState.relationshipStartDate);
+      const today = new Date();
+      const diffTime = Math.abs(today - startDate);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+      return diffDays;
+    }
+
+    function calculateStreakDays() {
+      const dates = Object.keys(appState.interactions).sort();
+      if (dates.length === 0) return 0;
+
+      let streak = 0;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // 从今天开始往前检查
+      let checkDate = new Date(today);
+
+      while (true) {
+        const dateStr = formatDate(checkDate);
+        if (appState.interactions[dateStr] && appState.interactions[dateStr].length > 0) {
+          streak++;
+          checkDate.setDate(checkDate.getDate() - 1);
+        } else {
+          // 如果是今天，并且还没有互动，不算中断
+          if (formatDate(checkDate) === formatDate(today)) {
+            checkDate.setDate(checkDate.getDate() - 1);
+            continue;
+          }
+          break;
+        }
+      }
+
+      return streak;
+    }
+
+    function calculateMonthlyInteractions() {
+      const today = new Date();
+      const currentMonth = today.getMonth();
+      const currentYear = today.getFullYear();
+
+      let count = 0;
+
+      Object.keys(appState.interactions).forEach(dateStr => {
+        const date = new Date(dateStr);
+        if (date.getMonth() === currentMonth && date.getFullYear() === currentYear) {
+          count += appState.interactions[dateStr].length;
+        }
+      });
+
+      return count;
+    }
+
+    function updateStats() {
+      // 更新相恋天数
+      const relationshipDays = calculateRelationshipDays();
+      elements.interactionDays.innerHTML = `我们已经在一起 <span class="text-love-700 text-lg">${relationshipDays}</span> 天`;
+
+      // 更新连续互动天数
+      const streakDays = calculateStreakDays();
+      elements.streakDays.textContent = `${streakDays}天`;
+      elements.streakProgress.style.width = `${Math.min(streakDays / 100 * 100, 100)}%`;
+
+      // 更新月度互动次数
+      const monthlyInteractions = calculateMonthlyInteractions();
+      elements.monthlyInteractions.textContent = `${monthlyInteractions}次`;
+      elements.monthlyProgress.style.width = `${Math.min(monthlyInteractions / 30 * 100, 100)}%`;
+
+      // 更新图表
+      updateChart();
+
+      // 检查徽章解锁
+      checkBadges();
+    }
+
+    function updateChart() {
+      const today = new Date();
+      const labels = [];
+      const data = [];
+
+      // 获取过去30天的数据
+      for (let i = 29; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+
+        labels.push(`${date.getMonth() + 1}/${date.getDate()}`);
+
+        const dateStr = formatDate(date);
+        const interactions = appState.interactions[dateStr] || [];
+        data.push(interactions.length);
+      }
+
+      // 如果图表已存在，销毁它
+      if (interactionChart) {
+        interactionChart.destroy();
+      }
+
+      // 创建新图表
+      const ctx = elements.interactionChart.getContext('2d');
+      interactionChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: '每日互动次数',
+            data: data,
+            backgroundColor: 'rgba(255, 158, 158, 0.2)',
+            borderColor: 'rgba(255, 158, 158, 1)',
+            borderWidth: 2,
+            tension: 0.4,
+            pointBackgroundColor: 'rgba(255, 158, 158, 1)',
+            pointRadius: 4,
+            pointHoverRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                stepSize: 1
+              }
+            },
+            x: {
+              ticks: {
+                maxTicksLimit: 10
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              display: false
+            }
+          }
+        }
+      });
+    }
+
+    function renderCalendar() {
+      const year = appState.currentDate.getFullYear();
+      const month = appState.currentDate.getMonth();
+
+      elements.currentMonth.textContent = formatMonthYear(appState.currentDate);
+
+      const daysInMonth = getDaysInMonth(year, month);
+      const firstDay = getFirstDayOfMonth(year, month);
+
+      // 清空日历
+      elements.calendarGrid.innerHTML = '';
+
+      // 添加空白格子
+      for (let i = 0; i < firstDay; i++) {
+        const emptyDay = document.createElement('div');
+        emptyDay.className = 'calendar-day bg-gray-50';
+        elements.calendarGrid.appendChild(emptyDay);
+      }
+
+      // 添加日期格子
+      for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(year, month, day);
+        const dateStr = formatDate(date);
+
+        const dayElement = document.createElement('div');
+        dayElement.className = 'calendar-day';
+
+        // 添加日期数字
+        const dayNumber = document.createElement('span');
+        dayNumber.className = 'text-sm font-medium';
+        dayNumber.textContent = day;
+        dayElement.appendChild(dayNumber);
+
+        // 添加互动指示器
+        if (hasInteraction(date)) {
+          const interactions = getInteractionsForDate(date);
+          dayElement.classList.add('has-content');
+
+          // 添加内容预览
+          if (interactions.length > 0) {
+            const preview = document.createElement('div');
+            preview.className = 'mt-1 text-xs truncate w-full text-center';
+
+            if (interactions[0].type === 'text') {
+              preview.textContent = interactions[0].text.substring(0, 10) + (interactions[0].text.length > 10 ? '...' : '');
+            } else if (interactions[0].type === 'image') {
+              preview.innerHTML = '<i class="fa fa-image text-love-600"></i>';
+            }
+            dayElement.appendChild(preview);
+          }
+        }
+
+        // 添加纪念日标记
+        if (isAnniversary(date)) {
+          dayElement.classList.add('has-anniversary');
+          const annivIndicator = document.createElement('div');
+          annivIndicator.className = 'absolute bottom-1 left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-love-700';
+          dayElement.appendChild(annivIndicator);
+        }
+
+        // 标记今天
+        if (isToday(date)) {
+          dayElement.classList.add('today');
+        }
+
+        // 添加点击事件
+        dayElement.addEventListener('click', () => {
+          showDateDetail(date);
+        });
+
+        elements.calendarGrid.appendChild(dayElement);
+      }
+    }
+
+    function renderBadges() {
+      elements.badgesContainer.innerHTML = '';
+
+      appState.badges.forEach(badge => {
+        const badgeElement = document.createElement('div');
+        badgeElement.className = `flex flex-col items-center p-3 rounded-xl transition-all duration-300 ${badge.unlocked ? 'badge-hover' : 'opacity-50'}`;
+
+        const badgeImage = document.createElement('img');
+        badgeImage.src = badge.icon;
+        badgeImage.alt = badge.title;
+        badgeImage.className = `w-16 h-16 object-contain mb-2 ${badge.unlocked ? 'badge-glow' : ''}`;
+        badgeElement.appendChild(badgeImage);
+
+        const badgeTitle = document.createElement('span');
+        badgeTitle.className = 'text-xs font-medium text-center';
+        badgeTitle.textContent = badge.title;
+        badgeElement.appendChild(badgeTitle);
+
+        elements.badgesContainer.appendChild(badgeElement);
+      });
+    }
+
+    function renderRecentInteractions() {
+      elements.recentInteractions.innerHTML = '';
+
+      // 获取所有互动并按日期排序
+      const allInteractions = [];
+
+      Object.keys(appState.interactions).forEach(dateStr => {
+        const interactions = appState.interactions[dateStr];
+        interactions.forEach(interaction => {
+          allInteractions.push({
+            ...interaction,
+            date: dateStr
+          });
+        });
+      });
+
+      // 按时间倒序排序
+      allInteractions.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+      // 显示最近5条互动
+      const recentInteractions = allInteractions.slice(0, 5);
+
+      if (recentInteractions.length === 0) {
+        elements.recentInteractions.innerHTML = `
+          <div class="text-center text-gray-500 py-8">
+            还没有互动记录，开始你们的第一个互动吧！
+          </div>
+        `;
+        return;
+      }
+
+      recentInteractions.forEach(interaction => {
+        const date = new Date(interaction.date);
+        const dateStr = formatDisplayDate(date);
+
+        const interactionElement = document.createElement('div');
+        interactionElement.className = 'border-l-4 border-love-400 pl-3 py-1';
+
+        const header = document.createElement('div');
+        header.className = 'flex justify-between items-center mb-1';
+
+        const author = document.createElement('span');
+        author.className = 'text-sm font-medium text-love-700';
+        author.textContent = interaction.author;
+        header.appendChild(author);
+
+        const dateSpan = document.createElement('span');
+        dateSpan.className = 'text-xs text-gray-500';
+        dateSpan.textContent = dateStr;
+        header.appendChild(dateSpan);
+
+        interactionElement.appendChild(header);
+
+        if (interaction.type === 'text') {
+          const text = document.createElement('p');
+          text.className = 'text-sm';
+          text.textContent = interaction.text;
+          interactionElement.appendChild(text);
+        } else if (interaction.type === 'image') {
+          const image = document.createElement('img');
+          image.src = interaction.imageUrl;
+          image.className = 'w-full max-h-40 object-cover rounded-lg mt-1';
+          interactionElement.appendChild(image);
+        }
+
+        elements.recentInteractions.appendChild(interactionElement);
+      });
+    }
+
+    function renderAnniversaries() {
+      elements.anniversariesList.innerHTML = '';
+
+      appState.anniversaries.forEach((anniversary, index) => {
+        const date = new Date(anniversary.date);
+        const dateStr = formatDisplayDate(date);
+
+        const annivElement = document.createElement('div');
+        annivElement.className = 'flex justify-between items-center bg-love-50 rounded-lg p-2';
+
+        const info = document.createElement('div');
+        info.className = 'flex items-center';
+
+        const heartIcon = document.createElement('i');
+        heartIcon.className = 'fa fa-heart text-love-600 mr-2';
+        info.appendChild(heartIcon);
+
+        const text = document.createElement('div');
+        text.className = 'text-sm';
+        text.innerHTML = `<div class="font-medium">${anniversary.title}</div><div class="text-xs text-gray-500">${dateStr}</div>`;
+        info.appendChild(text);
+
+        annivElement.appendChild(info);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'text-gray-400 hover:text-love-700';
+        deleteBtn.innerHTML = '<i class="fa fa-trash"></i>';
+        deleteBtn.addEventListener('click', () => {
+          appState.anniversaries.splice(index, 1);
+          renderAnniversaries();
+          saveDataToFirebase();
+        });
+
+        annivElement.appendChild(deleteBtn);
+
+        elements.anniversariesList.appendChild(annivElement);
+      });
+    }
+
+    function showDateDetail(date) {
+      appState.selectedDate = date;
+
+      elements.detailModalTitle.textContent = formatDisplayDate(date);
+
+      const interactions = getInteractionsForDate(date);
+
+      if (interactions.length === 0) {
+        elements.dateInteractions.innerHTML = `
+          <div class="text-center text-gray-500 py-8">
+            这一天还没有互动记录
+          </div>
+        `;
+      } else {
+        elements.dateInteractions.innerHTML = '';
+
+        interactions.forEach(interaction => {
+          const interactionElement = document.createElement('div');
+          interactionElement.className = 'border-l-4 border-love-400 pl-3 py-2 mb-4';
+
+          const header = document.createElement('div');
+          header.className = 'flex justify-between items-center mb-1';
+
+          const author = document.createElement('span');
+          author.className = 'text-sm font-medium text-love-700';
+          author.textContent = interaction.author;
+          header.appendChild(author);
+
+          const time = document.createElement('span');
+          time.className = 'text-xs text-gray-500';
+          time.textContent = new Date(interaction.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+          header.appendChild(time);
+
+          interactionElement.appendChild(header);
+
+          if (interaction.type === 'text') {
+            const text = document.createElement('p');
+            text.className = 'text-sm';
+            text.textContent = interaction.text;
+            interactionElement.appendChild(text);
+          } else if (interaction.type === 'image') {
+            const image = document.createElement('img');
+            image.src = interaction.imageUrl;
+            image.className = 'w-full max-h-60 object-cover rounded-lg mt-1';
+            interactionElement.appendChild(image);
+          }
+
+          elements.dateInteractions.appendChild(interactionElement);
+        });
+      }
+
+      // 显示纪念日信息
+      const anniversary = getAnniversary(date);
+      if (anniversary) {
+        const annivElement = document.createElement('div');
+        annivElement.className = 'bg-accent/20 border border-accent rounded-lg p-4 mb-4';
+
+        const annivHeader = document.createElement('div');
+        annivHeader.className = 'flex items-center mb-2';
+
+        const heartIcon = document.createElement('i');
+        heartIcon.className = 'fa fa-heart text-love-700 mr-2';
+        annivHeader.appendChild(heartIcon);
+
+        const annivTitle = document.createElement('h3');
+        annivTitle.className = 'font-bold text-love-800';
+        annivTitle.textContent = anniversary.title;
+        annivHeader.appendChild(annivTitle);
+
+        annivElement.appendChild(annivHeader);
+
+        const annivDate = document.createElement('p');
+        annivDate.className = 'text-sm text-gray-600';
+        annivDate.textContent = `纪念日: ${formatDisplayDate(new Date(anniversary.date))}`;
+        annivElement.appendChild(annivDate);
+
+        elements.dateInteractions.prepend(annivElement);
+      }
+
+      elements.dateDetailModal.classList.remove('hidden');
+    }
+
+    function showBadgeUnlock(badge) {
+      elements.unlockedBadgeImage.src = badge.icon;
+      elements.unlockedBadgeTitle.textContent = badge.title;
+      elements.unlockedBadgeDescription.textContent = badge.description;
+
+      elements.badgeUnlockModal.classList.remove('hidden');
+    }
+
+    function checkBadges() {
+      const relationshipDays = calculateRelationshipDays();
+      const streakDays = calculateStreakDays();
+
+      appState.badges.forEach(badge => {
+        if (!badge.unlocked) {
+          let shouldUnlock = false;
+
+          if (badge.condition.type === 'relationship_days') {
+            shouldUnlock = relationshipDays >= badge.condition.value;
+          } else if (badge.condition.type === 'streak_days') {
+            shouldUnlock = streakDays >= badge.condition.value;
+          }
+
+          if (shouldUnlock) {
+            badge.unlocked = true;
+            showBadgeUnlock(badge);
+            saveDataToFirebase();
+          }
+        }
+      });
+
+      renderBadges();
+    }
+
+    function saveInteraction() {
+      const text = elements.interactionText.value.trim();
+      const hasText = text !== '';
+      const hasImage = appState.selectedImage !== null;
+
+      if (!hasText && !hasImage) {
+        alert('请输入文字或上传图片');
+        return;
+      }
+
+      const today = new Date();
+      const dateStr = formatDate(today);
+
+      if (!appState.interactions[dateStr]) {
+        appState.interactions[dateStr] = [];
+      }
+
+      if (hasText) {
+        appState.interactions[dateStr].push({
+          id: Date.now().toString(),
+          type: 'text',
+          text: text,
+          author: appState.yourName || '我',
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      if (hasImage) {
+        appState.interactions[dateStr].push({
+          id: Date.now().toString(),
+          type: 'image',
+          imageUrl: appState.selectedImage,
+          author: appState.yourName || '我',
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      // 清空输入
+      elements.interactionText.value = '';
+      appState.selectedImage = null;
+      elements.imagePreviewContainer.classList.add('hidden');
+      elements.imagePreview.src = '';
+      elements.imageInput.value = '';
+
+      // 保存数据到 Firebase
+      saveDataToFirebase();
+
+      // 更新界面
+      renderCalendar();
+      renderRecentInteractions();
+      updateStats();
+    }
+
+    function loadDataFromFirebase() {
+      database.ref('loveCalendarData').once('value')
+        .then((snapshot) => {
+          const data = snapshot.val();
+
+          if (data) {
+            appState.relationshipStartDate = data.relationshipStartDate || null;
+            appState.yourName = data.yourName || '';
+            appState.partnerName = data.partnerName || '';
+            appState.interactions = data.interactions || {};
+            appState.anniversaries = data.anniversaries || [];
+
+            if (data.badges) {
+              appState.badges = data.badges;
+            }
+
+            // 更新界面
+            initSettings();
+            renderCalendar();
+            renderBadges();
+            renderRecentInteractions();
+            updateStats();
+          }
+        })
+        .catch((error) => {
+          console.error('读取数据失败:', error);
+        });
+    }
+
+    function saveDataToFirebase() {
+      const dataToSave = {
+        relationshipStartDate: appState.relationshipStartDate,
+        yourName: appState.yourName,
+        partnerName: appState.partnerName,
+        interactions: appState.interactions,
+        anniversaries: appState.anniversaries,
+        badges: appState.badges
+      };
+
+      database.ref('loveCalendarData').set(dataToSave)
+        .then(() => {
+          console.log('数据保存成功');
+        })
+        .catch((error) => {
+          console.error('保存数据失败:', error);
+        });
+    }
+
+    function initSettings() {
+      // 设置今天的日期为默认值
+      const today = new Date();
+      const todayStr = formatDate(today);
+
+      // 设置相恋开始日期
+      if (appState.relationshipStartDate) {
+        elements.relationshipStartDate.value = appState.relationshipStartDate;
+      } else {
+        elements.relationshipStartDate.value = todayStr;
+      }
+
+      // 设置名字
+      elements.yourName.value = appState.yourName || '';
+      elements.partnerName.value = appState.partnerName || '';
+
+      // 设置新纪念日日期为今天
+      elements.newAnniversaryDate.value = todayStr;
+
+      // 渲染纪念日列表
+      renderAnniversaries();
+    }
+
+    function init() {
+      // 从 Firebase 加载数据
+      loadDataFromFirebase();
+
+      // 设置今天的日期
+      elements.todayDate.textContent = formatDisplayDate(new Date());
+
+      // 添加事件监听器
+
+      // 日历导航
+      elements.prevMonth.addEventListener('click', () => {
+        appState.currentDate.setMonth(appState.currentDate.getMonth() - 1);
+        renderCalendar();
+      });
+
+      elements.nextMonth.addEventListener('click', () => {
+        appState.currentDate.setMonth(appState.currentDate.getMonth() + 1);
+        renderCalendar();
+      });
+
+      // 日历视图切换
+      elements.calendarViewBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          elements.calendarViewBtns.forEach(b => {
+            b.classList.remove('bg-love-500', 'text-white');
+            b.classList.add('bg-love-100', 'text-love-800');
+          });
+
+          btn.classList.remove('bg-love-100', 'text-love-800');
+          btn.classList.add('bg-love-500', 'text-white');
+
+          appState.currentView = btn.dataset.view;
+          renderCalendar();
+        });
+      });
+
+      // 图片上传
+      elements.uploadImageBtn.addEventListener('click', () => {
+        elements.imageInput.click();
+      });
+
+      elements.imageInput.addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) {
+          const reader = new FileReader();
+
+          reader.onload = (e) => {
+            appState.selectedImage = e.target.result;
+            elements.imagePreview.src = e.target.result;
+            elements.imagePreviewContainer.classList.remove('hidden');
+            elements.imagePreviewContainer.classList.add('relative');
+          };
+
+          reader.readAsDataURL(e.target.files[0]);
+        }
+      });
+
+      elements.removeImageBtn.addEventListener('click', () => {
+        appState.selectedImage = null;
+        elements.imagePreviewContainer.classList.add('hidden');
+        elements.imagePreview.src = '';
+        elements.imageInput.value = '';
+      });
+
+      // 保存互动
+      elements.saveInteractionBtn.addEventListener('click', saveInteraction);
+
+      // 设置按钮
+      elements.settingsBtn.addEventListener('click', () => {
+        elements.settingsModal.classList.remove('hidden');
+      });
+
+      elements.closeSettingsBtn.addEventListener('click', () => {
+        elements.settingsModal.classList.add('hidden');
+      });
+
+      // 添加纪念日
+      elements.addAnniversaryBtn.addEventListener('click', () => {
+        const title = elements.newAnniversaryTitle.value.trim();
+        const date = elements.newAnniversaryDate.value;
+
+        if (title && date) {
+          appState.anniversaries.push({
+            id: Date.now().toString(),
+            title: title,
+            date: date
+          });
+
+          elements.newAnniversaryTitle.value = '';
+          renderAnniversaries();
+          saveDataToFirebase();
+        }
+      });
+
+      // 保存设置
+      elements.saveSettingsBtn.addEventListener('click', () => {
+        appState.relationshipStartDate = elements.relationshipStartDate.value;
+        appState.yourName = elements.yourName.value.trim();
+        appState.partnerName = elements.partnerName.value.trim();
+
+        saveDataToFirebase();
+
+        // 更新界面
+        updateStats();
+        renderRecentInteractions();
+
+        elements.settingsModal.classList.add('hidden');
+      });
+
+      // 关闭日期详情模态框
+      elements.closeDetailBtn.addEventListener('click', () => {
+        elements.dateDetailModal.classList.add('hidden');
+      });
+
+      // 关闭徽章解锁模态框
+      elements.closeBadgeModal.addEventListener('click', () => {
+        elements.badgeUnlockModal.classList.add('hidden');
+      });
+
+      // 监听 Firebase 数据变化，实时同步
+      database.ref('loveCalendarData').on('value', (snapshot) => {
+        const data = snapshot.val();
+
+        if (data) {
+          appState.relationshipStartDate = data.relationshipStartDate || null;
+          appState.yourName = data.yourName || '';
+          appState.partnerName = data.partnerName || '';
+          appState.interactions = data.interactions || {};
+          appState.anniversaries = data.anniversaries || [];
+
+          if (data.badges) {
+            appState.badges = data.badges;
+          }
+
+          // 更新界面
+          initSettings();
+          renderCalendar();
+          renderBadges();
+          renderRecentInteractions();
+          updateStats();
+        }
+      });
+    }
+
+    // 初始化应用
+    init();
+</script>
+</body>
+</html>
